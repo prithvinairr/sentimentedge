@@ -307,7 +307,7 @@ with st.sidebar:
             )
 
     st.markdown("---")
-    st.markdown("<div style='font-size:9px;color:#1a3a1a;line-height:2;'>PYTHON · PRAW · YFINANCE<br>VADER NLP · SKLEARN · SQLITE<br>STREAMLIT · PLOTLY</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:9px;color:#1a3a1a;line-height:2;'>PYTHON · YFINANCE · VADER NLP<br>SCIKIT-LEARN · SQLITE<br>STREAMLIT · PLOTLY</div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  PIPELINE
@@ -454,10 +454,17 @@ with tab1:
     st.markdown(f"<div class='section-head'>{full_name} — PRICE × SENTIMENT</div>", unsafe_allow_html=True)
     st.markdown("<div class='section-sub'>90-day candlestick price with social sentiment overlay</div>", unsafe_allow_html=True)
 
-    fig = make_subplots(rows=3, cols=1, shared_xaxes=True,
-                        row_heights=[0.55,0.22,0.23], vertical_spacing=0.03)
+    # ── 4-row subplot: Price | Sentiment | Post Volume | Daily Return ─────────
+    fig = make_subplots(
+        rows=4, cols=1,
+        shared_xaxes=True,
+        row_heights=[0.45, 0.20, 0.18, 0.17],
+        vertical_spacing=0.03,
+        subplot_titles=["", "SENTIMENT", "POST VOLUME", "DAILY RETURN %"],
+    )
 
-    if all(c in prc.columns for c in ["open","high","low","close"]):
+    # Row 1 — Candlestick price
+    if all(col in prc.columns for col in ["open","high","low","close"]):
         fig.add_trace(go.Candlestick(
             x=prc["date"], open=prc["open"], high=prc["high"],
             low=prc["low"], close=prc["close"],
@@ -466,35 +473,47 @@ with tab1:
             name=active_ticker, showlegend=False,
         ), row=1, col=1)
     else:
-        fig.add_trace(go.Scatter(x=prc["date"], y=prc["close"],
-            line=dict(color=AMBER,width=2), fill="tozeroy",
-            fillcolor="rgba(255,176,0,0.05)", name="Price"), row=1, col=1)
+        fig.add_trace(go.Scatter(
+            x=prc["date"], y=prc["close"],
+            line=dict(color=AMBER, width=2),
+            fill="tozeroy", fillcolor="rgba(255,176,0,0.05)",
+            name="Price",
+        ), row=1, col=1)
 
+    # Row 2 — Sentiment line (own panel, no axis conflict)
     fig.add_trace(go.Scatter(
         x=sent["date"], y=sent["combined_sentiment"],
-        name="Sentiment", line=dict(color=CYAN,width=1.5,dash="dot"),
-        yaxis="y2", opacity=0.85,
-    ), row=1, col=1)
-    fig.add_hline(y=0, line_dash="dash", line_color="#1a3a1a", row=1, col=1)
+        name="Sentiment", line=dict(color=CYAN, width=1.5),
+        fill="tozeroy", fillcolor="rgba(0,229,255,0.06)",
+    ), row=2, col=1)
+    fig.add_hline(y=0, line_dash="dash", line_color="#1a3a1a", row=2, col=1)
 
+    # Row 3 — Post volume bars
     vol_colors = [GREEN if s >= 0 else RED for s in sent["combined_sentiment"]]
-    fig.add_trace(go.Bar(x=sent["date"], y=sent["post_volume"],
-        name="Post Volume", marker_color=vol_colors, opacity=0.55), row=2, col=1)
+    fig.add_trace(go.Bar(
+        x=sent["date"], y=sent["post_volume"],
+        name="Post Volume", marker_color=vol_colors, opacity=0.6,
+    ), row=3, col=1)
 
+    # Row 4 — Daily return %
     ret_colors = [GREEN if r >= 0 else RED for r in prc["pct_change"].fillna(0)]
-    fig.add_trace(go.Bar(x=prc["date"], y=prc["pct_change"],
-        name="Daily Return %", marker_color=ret_colors, opacity=0.75), row=3, col=1)
+    fig.add_trace(go.Bar(
+        x=prc["date"], y=prc["pct_change"],
+        name="Daily Return %", marker_color=ret_colors, opacity=0.75,
+    ), row=4, col=1)
 
-    fig.update_layout(**PLOT_LAYOUT, height=620, showlegend=True,
-                      xaxis_rangeslider_visible=False,
-                      yaxis2=dict(overlaying="y", side="right", showgrid=False,
-                                  title=dict(text="Sentiment", font=dict(color=CYAN,size=9)),
-                                  tickfont=dict(color=CYAN,size=9), zeroline=False))
+    fig.update_layout(
+        **PLOT_LAYOUT,
+        height=700,
+        showlegend=True,
+        xaxis_rangeslider_visible=False,
+    )
+    fig.update_annotations(font=dict(color="#2a5a2a", size=9))
     st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
     st.markdown("<div class='section-head'>ROLLING SENTIMENT → PRICE CORRELATION</div>", unsafe_allow_html=True)
-    st.markdown("<div class='section-sub'>14-day rolling window · does yesterday's Reddit predict today's move?</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-sub'>14-day rolling window · does yesterday's sentiment predict today's price move?</div>", unsafe_allow_html=True)
 
     merged = pd.merge(sent[["date","combined_sentiment"]], prc[["date","pct_change"]],
                       on="date", how="inner").sort_values("date")
